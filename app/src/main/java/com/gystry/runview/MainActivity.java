@@ -8,6 +8,7 @@ import android.os.Parcelable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
 
@@ -20,13 +21,18 @@ public class MainActivity extends AppCompatActivity {
     private RunwayView runView;
     private volatile Bitmap bitmap = null;
     private List<OtherOneData> mList;
+    Bundle bundle;
+    private TextView tvContent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         runView = (RunwayView) findViewById(R.id.rv_runview);
+        tvContent = (TextView) findViewById(R.id.tv_content);
+        tvContent.setText(null);
         mList = new ArrayList<>();
+        bundle = new Bundle();
         mList.add(new OtherOneData(200, "http://img1.imgtn.bdimg.com/it/u=1412195272,3821185777&fm=26&gp=0.jpg"));
         mList.add(new OtherOneData(100, "http://img1.imgtn.bdimg.com/it/u=3771844506,3707807471&fm=26&gp=0.jpg"));
         mList.add(new OtherOneData(240, "http://www.caisheng.net/UploadFiles/img_3_3370409597_881988130_27.jpg"));
@@ -37,8 +43,6 @@ public class MainActivity extends AppCompatActivity {
         OtherDataCache.getInstance().setList(mList);
         new Thread(new Runnable() {
             int i = 0;
-            Bundle bundle = new Bundle();
-
             @Override
             public void run() {
                 while (true) {
@@ -70,11 +74,11 @@ public class MainActivity extends AppCompatActivity {
                     OtherDataCache.getInstance().setList(mList);
 
                     Message message1 = handler.obtainMessage(1);
-                    bundle.putParcelableArrayList("otherData", (ArrayList<? extends Parcelable>) mList);
-                    Log.e("MainActivity", "&*&*:run: " + bundle + ":" + bundle.get("otherData"));
+//                    bundle.putParcelableArrayList("otherData", (ArrayList<? extends Parcelable>) mList);
+                    bundle.putString("otherData", "" + i);
+                    Log.e("MainActivity", "&*&*:run: " + bundle);
                     message.setData(bundle);
                     handler.sendMessage(message1);
-
                 }
             }
         }).start();
@@ -91,10 +95,11 @@ public class MainActivity extends AppCompatActivity {
                     runView.setmMovingDistance(arg1);
                     break;
                 case 1:
-                    Bundle data = msg.getData();
+                    Bundle data = msg.peekData();
+                    //                    List<OtherOneData> otherData = (List<OtherOneData>) data.get("otherData");
+                    Log.e("MainActivity", "&*&*:handleMessage: " + data);
+
                     List<OtherOneData> list = OtherDataCache.getInstance().getList();
-                    List<OtherOneData> otherData = (List<OtherOneData>) data.get("otherData");
-                    Log.e("MainActivity", "&*&*:handleMessage: " + data + ":" + otherData);
                     runView.setDataList(list);
                     break;
             }

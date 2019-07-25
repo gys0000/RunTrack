@@ -15,29 +15,22 @@ import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.View;
-
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.annotation.GlideExtension;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
+public class RunwaySurfaceView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
-/**
- * Created by 六掌大人 on 2018/5/3.
- */
+    private SurfaceHolder surfaceHolder;
+    private Canvas canvas;
+    private volatile boolean isDrawing;
 
-public class RunwayView extends View {
-
-    private final String TAG = this.getClass().getSimpleName();
     //跑道长度 米
     public static final int RUNWAY_LENGTH = 400;
     //弧度长度 米
@@ -120,21 +113,24 @@ public class RunwayView extends View {
     private boolean isDrawOrigin;
     private Paint mTestPaint;
 
-
-    public RunwayView(Context context) {
+    public RunwaySurfaceView(Context context) {
         this(context, null);
     }
 
-    public RunwayView(Context context, @Nullable AttributeSet attrs) {
+    public RunwaySurfaceView(Context context, AttributeSet attrs) {
         this(context, attrs, 0);
     }
 
-    public RunwayView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+    public RunwaySurfaceView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        this.init(context);
+        init(context);
     }
 
     private void init(Context context) {
+        surfaceHolder = getHolder();
+        surfaceHolder.addCallback(this);
+        setFocusable(true);
+
         mPaint = new Paint();
         mPaint.setAntiAlias(true);//抗锯齿
         mPaint.setDither(true);//防抖动
@@ -152,6 +148,8 @@ public class RunwayView extends View {
         mOtherPaint = new Paint();
         mOtherPaint.setAntiAlias(true);//抗锯齿
         mOtherPaint.setDither(true);
+        mOtherPaint.setStyle(Paint.Style.FILL);
+        mOtherPaint.setColor(0xFF046484);
 
         //要绘制的其他用户
         mOtherList = new ArrayList<>();
@@ -244,79 +242,115 @@ public class RunwayView extends View {
         path.close();
     }
 
+    @Override
+    public void surfaceCreated(SurfaceHolder holder) {
+        isDrawing = true;
+        new Thread(this).start();
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+        isDrawing = false;
+        surfaceHolder.removeCallback(this);
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
-    protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-        //绘制跑道
-        mPaint.setStyle(Paint.Style.STROKE);//填充样式改为描边
-
-        //绘制底层跑带
-        mPaint.setStrokeWidth(RUNWAY_WIDTH);//设置画笔宽度
-        mPaint.setShader(mShader);
-        canvas.drawPath(mPath, mPaint);
-
-        //绘制内一层跑带
-        mPaint.setShader(null);
-        mPaint.setColor(COLOR_BACKGROUND_A);
-        mPaint.setStrokeWidth(RUNWAY_WIDTH - 8);
-        canvas.drawPath(mPath, mPaint);
-
-        //绘制内二层的跑带
-        mPaint.setColor(COLOR_BACKGROUND_B);
-        mPaint.setStrokeWidth(RUNWAY_WIDTH - 36);
-        canvas.drawPath(mPath, mPaint);
-
-        //绘制内三层的跑带
-        mPaint.setColor(COLOR_BACKGROUND_A);
-        mPaint.setStrokeWidth(RUNWAY_WIDTH - 40);
-        canvas.drawPath(mPath, mPaint);
-
-        //绘制内四层跑带
-        mPaint.setColor(COLOR_BACKGROUND_B);
-        mPaint.setStrokeWidth(RUNWAY_WIDTH - 68);
-        canvas.drawPath(mPath, mPaint);
-
-        //绘制内五层跑带
-        mPaint.setColor(COLOR_BACKGROUND_A);
-        mPaint.setStrokeWidth(14);
-        canvas.drawPath(mPath, mPaint);
-        //绘制跑带总结：上边绘制的跑带时底层最大，二层缩小一点，所处内外层的两条线，依次缩小，绘制叠层。
-
-        //当前用户跑的位置的绘制
-        if (mCurrentPos[0] != 0) {
-            mMatrix.setTranslate(mCurrentPos[0], mCurrentPos[1]);
-            mRadialGradient.setLocalMatrix(mMatrix);
-            mPaint.setShader(mRadialGradient);
-            mPaint.setStrokeWidth(8);
-            canvas.drawPath(mRunPath, mPaint);
-            //画圆点
-            mPaint.setStyle(Paint.Style.FILL);//填充样式改为填充
-            canvas.drawCircle(mCurrentPos[0], mCurrentPos[1], 8, mPaint);
+    public void run() {
+        while (isDrawing) {
+            Log.e("RunwaySurfaceView", "run: ");
+            draw();
         }
+    }
 
-        //起点
-        canvas.drawBitmap(originBitmap, null, originRectF, null);
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    private void draw() {
+        try {
+            canvas = surfaceHolder.lockCanvas();
+            //下边是具体的绘制
+            canvas.drawColor(0xffffffff);
+            //绘制跑道
+            mPaint.setStyle(Paint.Style.STROKE);//填充样式改为描边
 
-        //绘制跑到中其他用户的位置
-        int i = 10;
-        for (ViewData viewData : mOtherList) {
-            if (viewData.getmOtherCurrentPos()[0] != 0 && viewData.getBitmap() != null) {
-                i += 3;
-                if (i > 30) {
-                    i = 10;
+            //绘制底层跑带
+            mPaint.setStrokeWidth(RUNWAY_WIDTH);//设置画笔宽度
+            mPaint.setShader(mShader);
+            canvas.drawPath(mPath, mPaint);
+
+            //绘制内一层跑带
+            mPaint.setShader(null);
+            mPaint.setColor(COLOR_BACKGROUND_A);
+            mPaint.setStrokeWidth(RUNWAY_WIDTH - 8);
+            canvas.drawPath(mPath, mPaint);
+
+            //绘制内二层的跑带
+            mPaint.setColor(COLOR_BACKGROUND_B);
+            mPaint.setStrokeWidth(RUNWAY_WIDTH - 36);
+            canvas.drawPath(mPath, mPaint);
+
+            //绘制内三层的跑带
+            mPaint.setColor(COLOR_BACKGROUND_A);
+            mPaint.setStrokeWidth(RUNWAY_WIDTH - 40);
+            canvas.drawPath(mPath, mPaint);
+
+            //绘制内四层跑带
+            mPaint.setColor(COLOR_BACKGROUND_B);
+            mPaint.setStrokeWidth(RUNWAY_WIDTH - 68);
+            canvas.drawPath(mPath, mPaint);
+
+            //绘制内五层跑带
+            mPaint.setColor(COLOR_BACKGROUND_A);
+            mPaint.setStrokeWidth(14);
+            canvas.drawPath(mPath, mPaint);
+            //绘制跑带总结：上边绘制的跑带时底层最大，二层缩小一点，所处内外层的两条线，依次缩小，绘制叠层。
+
+            //当前用户跑的位置的绘制
+            if (mCurrentPos[0] != 0) {
+                mMatrix.setTranslate(mCurrentPos[0], mCurrentPos[1]);
+                mRadialGradient.setLocalMatrix(mMatrix);
+                mPaint.setShader(mRadialGradient);
+                mPaint.setStrokeWidth(8);
+                canvas.drawPath(mRunPath, mPaint);
+                //画圆点
+                mPaint.setStyle(Paint.Style.FILL);//填充样式改为填充
+                canvas.drawCircle(mCurrentPos[0], mCurrentPos[1], 8, mPaint);
+            }
+
+            //起点
+            canvas.drawBitmap(originBitmap, null, originRectF, null);
+
+            //绘制跑到中其他用户的位置
+            int i = 10;
+            for (ViewData viewData : mOtherList) {
+                if (viewData.getmOtherCurrentPos()[0] != 0 && viewData.getBitmap() != null) {
+                    i += 3;
+                    if (i > 30) {
+                        i = 10;
+                    }
+//                    canvas.drawBitmap(viewData.getBitmap(), viewData.getmOtherCurrentPos()[0] - i, viewData.getmOtherCurrentPos()[1] - i, mOtherPaint);
+                    drawCircleBitmap(canvas, viewData, mOtherPaint, i);
                 }
-//                canvas.drawBitmap(viewData.getBitmap(), viewData.getmOtherCurrentPos()[0] - i, viewData.getmOtherCurrentPos()[1] - i, mOtherPaint);
-                drawCircleBitmap(canvas,viewData,mOtherPaint,i);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (canvas != null) {
+                surfaceHolder.unlockCanvasAndPost(canvas);
             }
         }
-        canvas.drawPath(mPath, mTestPaint);
     }
 
     private RectF circleRectF;
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void drawCircleBitmap(Canvas canvas, ViewData viewData, Paint paint, int i) {
+        Log.e("RunwaySurfaceView", "drawCircleBitmap: "+viewData.getBitmap().getByteCount() );
         circleRectF.set(viewData.getmOtherCurrentPos()[0] - i, viewData.getmOtherCurrentPos()[1] - i,
                 viewData.getmOtherCurrentPos()[0] - i + viewData.getBitmap().getWidth(), viewData.getmOtherCurrentPos()[1] - i + viewData.getBitmap().getHeight());
         int layerSign = canvas.saveLayer(circleRectF, paint);
@@ -335,7 +369,7 @@ public class RunwayView extends View {
                 setOtherOne(datum.getDistance(), datum.getBitmap());
             }
         }
-        invalidate();
+//        invalidate();
     }
 
     //计算位置
@@ -364,7 +398,7 @@ public class RunwayView extends View {
 
         mPathMeasure.getPosTan(stopD, mCurrentPos, mCurrentTan);
 
-        invalidate();
+//        invalidate();
         countCircleNum((int) totalDistance);
     }
 
@@ -376,4 +410,5 @@ public class RunwayView extends View {
 //            mRunPath.reset();
         }
     }
+
 }
